@@ -1,4 +1,8 @@
+<div align="center">
+
 # OpenCode Agents
+
+### AI agent framework for plan-first development workflows with approval-based execution
 
 [![GitHub stars](https://img.shields.io/github/stars/darrenhinde/opencode-agents?style=social)](https://github.com/darrenhinde/opencode-agents/stargazers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -6,7 +10,10 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow.svg?style=flat&logo=buy-me-a-coffee)](https://buymeacoffee.com/darrenhinde)
 
-AI agent framework for plan-first development workflows with approval-based execution. Multi-language support (TypeScript, Python, Go, Rust) with automatic testing, code review, and validation.
+**Multi-language support:** TypeScript • Python • Go • Rust  
+**Features:** Automatic testing • Code review • Validation
+
+</div>
 
 [![Watch Demo](https://img.youtube.com/vi/EOIzFMdmox8/maxresdefault.jpg)](https://youtu.be/EOIzFMdmox8?si=4ZSsVlAkhMxVmF2R)
 
