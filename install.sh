@@ -51,6 +51,9 @@ REGISTRY_URL="${RAW_URL}/registry.json"
 INSTALL_DIR="${OPENCODE_INSTALL_DIR:-.opencode}"  # Allow override via environment variable
 TEMP_DIR="/tmp/opencode-installer-$$"
 
+# Cleanup temp directory on exit (success or failure)
+trap 'rm -rf "$TEMP_DIR" 2>/dev/null || true' EXIT INT TERM
+
 # Global variables
 SELECTED_COMPONENTS=()
 INSTALL_MODE=""
@@ -915,6 +918,17 @@ perform_installation() {
         mkdir -p "$(dirname "$dest")"
         
         if curl -fsSL "$url" -o "$dest"; then
+            # Transform paths for global installation (any non-local path)
+            # Local paths: .opencode or */.opencode
+            if [[ "$INSTALL_DIR" != ".opencode" ]] && [[ "$INSTALL_DIR" != *"/.opencode" ]]; then
+                # Expand tilde and get absolute path for transformation
+                local expanded_path="${INSTALL_DIR/#\~/$HOME}"
+                # Transform @.opencode/context/ references to actual install path
+                sed -i.bak -e "s|@\.opencode/context/|@${expanded_path}/context/|g" \
+                           -e "s|\.opencode/context|${expanded_path}/context|g" "$dest" 2>/dev/null || true
+                rm -f "${dest}.bak" 2>/dev/null || true
+            fi
+            
             # Show appropriate message based on whether file existed before
             if [ "$file_existed" = true ]; then
                 print_success "Updated ${type}: ${id}"
@@ -1034,6 +1048,11 @@ main() {
         case "$1" in
             --install-dir=*)
                 CUSTOM_INSTALL_DIR="${1#*=}"
+                # Basic validation - check not empty
+                if [ -z "$CUSTOM_INSTALL_DIR" ]; then
+                    echo "Error: --install-dir requires a non-empty path"
+                    exit 1
+                fi
                 shift
                 ;;
             --install-dir)
