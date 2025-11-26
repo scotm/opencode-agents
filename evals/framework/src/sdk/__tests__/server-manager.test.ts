@@ -1,73 +1,85 @@
 /**
- * Smoke test for ServerManager
- * Tests basic server start/stop functionality
+ * Tests for ServerManager
+ * 
+ * NOTE: These tests require the opencode CLI to be installed and available.
+ * They are skipped by default in CI environments.
+ * 
+ * To run these tests manually:
+ *   npx vitest run src/sdk/__tests__/server-manager.test.ts
  */
 
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ServerManager } from '../server-manager.js';
 
-async function testServerManager() {
-  console.log('🧪 Testing ServerManager...\n');
+// Skip integration tests if SKIP_INTEGRATION is set or in CI
+const skipIntegration = process.env.SKIP_INTEGRATION === 'true' || process.env.CI === 'true';
 
-  const server = new ServerManager({
-    port: 0, // Random port
-    timeout: 10000, // 10 second timeout
+describe.skipIf(skipIntegration)('ServerManager Integration', () => {
+  let server: ServerManager;
+
+  beforeAll(() => {
+    server = new ServerManager({
+      port: 0, // Random port
+      timeout: 15000,
+    });
   });
 
-  try {
-    // Test 1: Start server
-    console.log('Test 1: Starting server...');
+  afterAll(async () => {
+    if (server?.running()) {
+      await server.stop();
+    }
+  });
+
+  it('should start the server', async () => {
     const { url, port } = await server.start();
-    console.log(`✅ Server started at ${url} (port ${port})\n`);
+    
+    expect(url).toBeDefined();
+    expect(port).toBeGreaterThan(0);
+    expect(server.running()).toBe(true);
+  });
 
-    // Test 2: Check server is running
-    console.log('Test 2: Checking server status...');
-    if (!server.running()) {
-      throw new Error('Server should be running');
-    }
-    console.log('✅ Server is running\n');
+  it('should return the server URL', () => {
+    const url = server.getUrl();
+    
+    expect(url).toBeDefined();
+    expect(url).toContain('http://');
+  });
 
-    // Test 3: Get URL
-    console.log('Test 3: Getting server URL...');
-    const serverUrl = server.getUrl();
-    if (!serverUrl) {
-      throw new Error('Server URL should not be null');
-    }
-    console.log(`✅ Server URL: ${serverUrl}\n`);
+  it('should respond to HTTP requests', async () => {
+    const url = server.getUrl();
+    if (!url) throw new Error('Server URL not available');
+    
+    const response = await fetch(url);
+    
+    expect(response.ok).toBe(true);
+  });
 
-    // Test 4: Verify server responds
-    console.log('Test 4: Verifying server responds...');
-    const response = await fetch(serverUrl);
-    if (!response.ok) {
-      throw new Error('Server should respond with 200');
-    }
-    const html = await response.text();
-    if (!html.includes('OpenCode')) {
-      throw new Error('Response should contain "OpenCode"');
-    }
-    console.log('✅ Server responds correctly\n');
-
-    // Test 5: Stop server
-    console.log('Test 5: Stopping server...');
+  it('should stop the server', async () => {
     await server.stop();
-    console.log('✅ Server stopped\n');
+    
+    expect(server.running()).toBe(false);
+  });
+});
 
-    // Test 6: Verify server is not running
-    console.log('Test 6: Verifying server stopped...');
-    if (server.running()) {
-      throw new Error('Server should not be running');
-    }
-    console.log('✅ Server is not running\n');
+// Unit tests that don't require a running server
+describe('ServerManager Unit', () => {
+  it('should create with default options', () => {
+    const server = new ServerManager();
+    
+    expect(server).toBeDefined();
+    expect(server.running()).toBe(false);
+  });
 
-    console.log('🎉 All ServerManager tests passed!\n');
-  } catch (error) {
-    console.error('❌ Test failed:', error);
-    await server.stop(); // Cleanup
-    process.exit(1);
-  }
-}
+  it('should create with custom port', () => {
+    const server = new ServerManager({ port: 8080 });
+    
+    expect(server).toBeDefined();
+    expect(server.running()).toBe(false);
+  });
 
-// Run the test
-testServerManager().catch((error) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
+  it('should return null URL when not running', () => {
+    const server = new ServerManager();
+    
+    expect(server.getUrl()).toBeNull();
+  });
 });

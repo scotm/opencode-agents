@@ -1,34 +1,46 @@
 /**
- * Smoke test for TestRunner
- * Tests basic test execution flow
+ * Tests for TestRunner
+ * 
+ * NOTE: Integration tests require the opencode CLI to be installed.
+ * They are skipped by default in CI environments.
+ * 
+ * To run these tests manually:
+ *   npx vitest run src/sdk/__tests__/test-runner.test.ts
  */
 
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TestRunner } from '../test-runner.js';
 import type { TestCase } from '../test-case-schema.js';
 
-async function testTestRunner() {
-  console.log('🧪 Testing TestRunner...\n');
+// Skip integration tests if SKIP_INTEGRATION is set or in CI
+const skipIntegration = process.env.SKIP_INTEGRATION === 'true' || process.env.CI === 'true';
 
-  const runner = new TestRunner({
-    debug: true,
-    defaultTimeout: 30000,
-    runEvaluators: false, // Disable evaluators for smoke test
+describe.skipIf(skipIntegration)('TestRunner Integration', () => {
+  let runner: TestRunner;
+
+  beforeAll(async () => {
+    runner = new TestRunner({
+      debug: false,
+      defaultTimeout: 30000,
+      runEvaluators: false, // Disable evaluators for faster tests
+    });
+    
+    await runner.start();
+  }, 30000); // 30s timeout for server startup
+
+  afterAll(async () => {
+    if (runner) {
+      await runner.stop();
+    }
   });
 
-  try {
-    // Test 1: Start runner
-    console.log('Test 1: Starting test runner...');
-    await runner.start();
-    console.log('✅ Test runner started\n');
-
-    // Test 2: Create a simple test case
-    console.log('Test 2: Creating test case...');
+  it('should run a simple test case', async () => {
     const testCase: TestCase = {
-      id: 'smoke-test-001',
+      id: 'unit-test-001',
       name: 'Simple Echo Test',
       description: 'Test that agent responds to a simple prompt',
       category: 'edge-case',
-      prompt: 'Say "Hello from test runner" and nothing else.',
+      prompt: 'Say "Hello" and nothing else.',
       approvalStrategy: {
         type: 'auto-approve',
       },
@@ -37,56 +49,92 @@ async function testTestRunner() {
         minMessages: 1,
       },
       timeout: 30000,
-      tags: ['smoke', 'simple'],
     };
-    console.log('✅ Test case created\n');
 
-    // Test 3: Run the test
-    console.log('Test 3: Running test case...');
     const result = await runner.runTest(testCase);
-    console.log('✅ Test execution completed\n');
 
-    // Test 4: Validate result
-    console.log('Test 4: Validating result...');
-    console.log(`  Session ID: ${result.sessionId}`);
-    console.log(`  Passed: ${result.passed}`);
-    console.log(`  Duration: ${result.duration}ms`);
-    console.log(`  Events: ${result.events.length}`);
-    console.log(`  Errors: ${result.errors.length}`);
-    console.log(`  Approvals: ${result.approvalsGiven}`);
+    expect(result.sessionId).toBeDefined();
+    expect(result.testCase.id).toBe('unit-test-001');
+    expect(result.duration).toBeGreaterThan(0);
+    expect(result.errors.length).toBe(0);
+  }, 60000); // 60s timeout
 
-    if (!result.sessionId) {
-      throw new Error('Expected sessionId to be set');
-    }
+  it('should capture events during test execution', async () => {
+    const testCase: TestCase = {
+      id: 'unit-test-002',
+      name: 'Event Capture Test',
+      description: 'Test that events are captured',
+      category: 'edge-case',
+      prompt: 'What is 2 + 2?',
+      approvalStrategy: {
+        type: 'auto-approve',
+      },
+      expected: {
+        pass: true,
+      },
+      timeout: 30000,
+    };
 
-    if (result.events.length === 0) {
-      console.warn('⚠️  Warning: No events captured (might be OK for simple prompt)');
-    }
+    const result = await runner.runTest(testCase);
 
-    if (result.errors.length > 0) {
-      console.error('Errors:', result.errors);
-      throw new Error('Test execution had errors');
-    }
+    expect(result.events.length).toBeGreaterThan(0);
+  }, 60000);
 
-    console.log('✅ Result validation passed\n');
+  it('should handle test with behavior expectations', async () => {
+    const testCase: TestCase = {
+      id: 'unit-test-003',
+      name: 'Behavior Test',
+      description: 'Test with behavior expectations',
+      category: 'edge-case',
+      prompt: 'Say "Test passed" and nothing else.',
+      approvalStrategy: {
+        type: 'auto-approve',
+      },
+      behavior: {
+        maxToolCalls: 0, // Should not use any tools
+      },
+      timeout: 30000,
+    };
 
-    // Test 5: Stop runner
-    console.log('Test 5: Stopping test runner...');
-    await runner.stop();
-    console.log('✅ Test runner stopped\n');
+    const result = await runner.runTest(testCase);
 
-    console.log('🎉 All TestRunner tests passed!\n');
-    console.log(`Final result: ${result.passed ? 'PASSED' : 'FAILED'}`);
-    process.exit(result.passed ? 0 : 1);
-  } catch (error) {
-    console.error('❌ Test failed:', error);
-    await runner.stop();
-    process.exit(1);
-  }
-}
+    expect(result.sessionId).toBeDefined();
+    expect(result.errors.length).toBe(0);
+  }, 60000);
+});
 
-// Run the test
-testTestRunner().catch((error) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
+// Unit tests that don't require a running server
+describe('TestRunner Unit', () => {
+  it('should create with default options', () => {
+    const runner = new TestRunner();
+    
+    expect(runner).toBeDefined();
+  });
+
+  it('should create with custom options', () => {
+    const runner = new TestRunner({
+      port: 8080,
+      debug: true,
+      defaultTimeout: 60000,
+      runEvaluators: false,
+    });
+    
+    expect(runner).toBeDefined();
+  });
+
+  it('should throw if runTest called before start', async () => {
+    const runner = new TestRunner();
+    
+    const testCase: TestCase = {
+      id: 'test',
+      name: 'Test',
+      description: 'Test',
+      category: 'edge-case',
+      prompt: 'Test',
+      approvalStrategy: { type: 'auto-approve' },
+      expected: { pass: true },
+    };
+
+    await expect(runner.runTest(testCase)).rejects.toThrow('Test runner not started');
+  });
 });

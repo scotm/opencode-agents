@@ -35,6 +35,13 @@ export const BehaviorExpectationSchema = z.object({
   mustUseTools: z.array(z.string()).optional(),
 
   /**
+   * Alternative tool sets - at least one set must be fully used
+   * Example: [[bash], [list]] means either bash OR list must be used
+   * Example: [[bash, grep], [glob, read]] means either (bash AND grep) OR (glob AND read)
+   */
+  mustUseAnyOf: z.array(z.array(z.string())).optional(),
+
+  /**
    * Tools that MAY be used (optional)
    */
   mayUseTools: z.array(z.string()).optional(),

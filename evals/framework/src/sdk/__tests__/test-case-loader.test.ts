@@ -1,7 +1,11 @@
 /**
  * Test YAML test case schema and loader
+ * 
+ * NOTE: This file tests loading test cases from the actual test directory.
+ * For more comprehensive YAML loading tests, see yaml-loader.test.ts
  */
 
+import { describe, it, expect } from 'vitest';
 import { loadTestCase } from '../test-case-loader.js';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
@@ -10,94 +14,73 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-async function testYamlLoader() {
-  console.log('🧪 Testing YAML Test Case Loader...\n');
+// Path to test files - correct path to agents/openagent/tests
+const testFilesDir = join(__dirname, '../../../../agents/openagent/tests');
 
-  try {
-    // Test 1: Load sample test case
-    console.log('Test 1: Loading sample test case...');
-    const testCasePath = join(
-      __dirname,
-      '../../../..',
-      'opencode/openagent/sdk-tests/developer/install-dependencies.yaml'
-    );
-    
-    const testCase = await loadTestCase(testCasePath);
-    
-    console.log(`✅ Loaded test case: ${testCase.id}`);
-    console.log(`   Name: ${testCase.name}`);
-    console.log(`   Category: ${testCase.category}`);
-    console.log(`   Approval: ${testCase.approvalStrategy.type}`);
-    console.log(`   Expected pass: ${testCase.expected?.pass || 'not specified'}`);
-    console.log();
+describe('TestCaseLoader', () => {
+  describe('loadTestCase', () => {
+    it('should load a valid test case from YAML', async () => {
+      const testCase = await loadTestCase(join(testFilesDir, 'developer/simple-bash-test.yaml'));
+      
+      expect(testCase.id).toBe('simple-bash-test');
+      expect(testCase.name).toBeDefined();
+      expect(testCase.description).toBeDefined();
+      expect(testCase.category).toBe('developer');
+      expect(testCase.prompt).toBeDefined();
+      expect(testCase.approvalStrategy).toBeDefined();
+    });
 
-    // Test 2: Validate schema fields
-    console.log('Test 2: Validating required fields...');
-    
-    if (!testCase.id) throw new Error('Missing id');
-    if (!testCase.name) throw new Error('Missing name');
-    if (!testCase.description) throw new Error('Missing description');
-    if (!testCase.category) throw new Error('Missing category');
-    if (!testCase.prompt) throw new Error('Missing prompt');
-    if (!testCase.approvalStrategy) throw new Error('Missing approvalStrategy');
-    if (!testCase.expected) throw new Error('Missing expected');
-    
-    console.log('✅ All required fields present\n');
+    it('should validate required fields', async () => {
+      const testCase = await loadTestCase(join(testFilesDir, 'developer/ctx-code-001.yaml'));
+      
+      // Required fields
+      expect(testCase.id).toBeDefined();
+      expect(testCase.name).toBeDefined();
+      expect(testCase.description).toBeDefined();
+      expect(testCase.category).toBeDefined();
+      expect(testCase.approvalStrategy).toBeDefined();
+      
+      // Must have prompt or prompts
+      expect(testCase.prompt || testCase.prompts).toBeDefined();
+    });
 
-    // Test 3: Validate approval strategy
-    console.log('Test 3: Validating approval strategy...');
-    
-    if (testCase.approvalStrategy.type !== 'auto-approve') {
-      throw new Error(`Expected auto-approve, got ${testCase.approvalStrategy.type}`);
-    }
-    
-    console.log('✅ Approval strategy valid\n');
+    it('should parse behavior expectations', async () => {
+      const testCase = await loadTestCase(join(testFilesDir, 'developer/ctx-code-001.yaml'));
+      
+      expect(testCase.behavior).toBeDefined();
+      expect(testCase.behavior?.mustUseTools).toContain('read');
+      expect(testCase.behavior?.mustUseTools).toContain('write');
+      expect(testCase.behavior?.requiresApproval).toBe(true);
+      expect(testCase.behavior?.requiresContext).toBe(true);
+    });
 
-    // Test 4: Validate expected results
-    console.log('Test 4: Validating expected results...');
-    
-    if (!testCase.expected) {
-      throw new Error('Expected results should be defined');
-    }
-    
-    if (testCase.expected.pass !== true) {
-      throw new Error('Expected pass should be true');
-    }
-    
-    if (!testCase.expected.minMessages) {
-      throw new Error('Expected minMessages to be defined');
-    }
-    
-    if (!testCase.expected.toolCalls || testCase.expected.toolCalls.length === 0) {
-      throw new Error('Expected toolCalls to be defined');
-    }
-    
-    console.log(`✅ Expected: pass=${testCase.expected.pass}, minMessages=${testCase.expected.minMessages}`);
-    console.log(`✅ Tool calls: ${testCase.expected.toolCalls.join(', ')}\n`);
+    it('should parse expected violations', async () => {
+      const testCase = await loadTestCase(join(testFilesDir, 'developer/ctx-code-001.yaml'));
+      
+      expect(testCase.expectedViolations).toBeDefined();
+      expect(testCase.expectedViolations?.length).toBeGreaterThan(0);
+      
+      const approvalViolation = testCase.expectedViolations?.find(v => v.rule === 'approval-gate');
+      expect(approvalViolation).toBeDefined();
+      expect(approvalViolation?.shouldViolate).toBe(false); // Positive test - should NOT violate
+    });
 
-    // Test 5: Validate optional fields
-    console.log('Test 5: Validating optional fields...');
-    
-    if (testCase.timeout) {
-      console.log(`✅ Timeout: ${testCase.timeout}ms`);
-    }
-    
-    if (testCase.tags && testCase.tags.length > 0) {
-      console.log(`✅ Tags: ${testCase.tags.join(', ')}`);
-    }
-    
-    console.log();
+    it('should parse approval strategy', async () => {
+      const testCase = await loadTestCase(join(testFilesDir, 'developer/simple-bash-test.yaml'));
+      
+      expect(testCase.approvalStrategy.type).toBe('auto-approve');
+    });
 
-    console.log('🎉 All YAML loader tests passed!\n');
-    process.exit(0);
-  } catch (error) {
-    console.error('❌ Test failed:', error);
-    process.exit(1);
-  }
-}
+    it('should parse optional fields', async () => {
+      const testCase = await loadTestCase(join(testFilesDir, 'developer/ctx-code-001.yaml'));
+      
+      expect(testCase.timeout).toBeDefined();
+      expect(testCase.tags).toBeDefined();
+      expect(testCase.tags?.length).toBeGreaterThan(0);
+    });
 
-// Run the test
-testYamlLoader().catch((error) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
+    it('should throw on invalid file path', async () => {
+      await expect(loadTestCase('/nonexistent/path.yaml')).rejects.toThrow();
+    });
+  });
 });

@@ -4,7 +4,7 @@
  * Combines messages and parts into a unified timeline for analysis.
  */
 
-import { TimelineEvent, Message, Part, ToolPart, TextPart } from '../types/index.js';
+import { TimelineEvent, Message, Part, ToolPart, TextPart, MessageWithParts } from '../types/index.js';
 import { SessionReader } from './session-reader.js';
 import { MessageParser } from './message-parser.js';
 
@@ -22,13 +22,18 @@ export class TimelineBuilder {
 
   /**
    * Build complete timeline for a session
+   * 
+   * Now async to support SDK-based session retrieval.
+   * Uses getMessagesWithParts() to get messages and parts in one call.
    */
-  buildTimeline(sessionId: string): TimelineEvent[] {
-    const messages = this.reader.getMessages(sessionId);
+  async buildTimeline(sessionId: string): Promise<TimelineEvent[]> {
+    // Get messages with parts included (SDK returns them together)
+    const messagesWithParts = await this.reader.getMessagesWithParts(sessionId);
     const events: TimelineEvent[] = [];
 
-    for (const message of messages) {
-      const parts = this.reader.getParts(sessionId, message.id);
+    for (const msgWithParts of messagesWithParts) {
+      const message = msgWithParts.info;
+      const parts = msgWithParts.parts || [];
 
       // Add message event
       events.push(this.createMessageEvent(message, parts));

@@ -7,6 +7,8 @@
  *   npm run eval:sdk
  *   npm run eval:sdk -- --debug
  *   npm run eval:sdk -- --no-evaluators
+ *   npm run eval:sdk -- --agent=opencoder
+ *   npm run eval:sdk -- --agent=openagent
  *   npm run eval:sdk -- --model=opencode/grok-code-fast
  *   npm run eval:sdk -- --model=anthropic/claude-3-5-sonnet-20241022
  *   npm run eval:sdk -- --pattern="developer/*.yaml" --model=openai/gpt-4-turbo
@@ -14,6 +16,7 @@
  * Options:
  *   --debug              Enable debug logging
  *   --no-evaluators      Skip running evaluators (faster)
+ *   --agent=AGENT        Run tests for specific agent (openagent, opencoder)
  *   --model=PROVIDER/MODEL  Override default model (default: opencode/grok-code-fast)
  *   --pattern=GLOB       Run specific test files (default: star-star/star.yaml)
  *   --timeout=MS         Test timeout in milliseconds (default: 60000)
@@ -32,6 +35,7 @@ const __dirname = dirname(__filename);
 interface CliArgs {
   debug: boolean;
   noEvaluators: boolean;
+  agent?: string;
   pattern?: string;
   timeout?: number;
   model?: string;
@@ -43,6 +47,7 @@ function parseArgs(): CliArgs {
   return {
     debug: args.includes('--debug'),
     noEvaluators: args.includes('--no-evaluators'),
+    agent: args.find(a => a.startsWith('--agent='))?.split('=')[1],
     pattern: args.find(a => a.startsWith('--pattern='))?.split('=')[1],
     timeout: parseInt(args.find(a => a.startsWith('--timeout='))?.split('=')[1] || '60000'),
     model: args.find(a => a.startsWith('--model='))?.split('=')[1],
@@ -130,19 +135,43 @@ async function main() {
   
   console.log('🚀 OpenCode SDK Test Runner\n');
   
-  // Find test files
-  const testDir = join(__dirname, '../../..', 'agents/openagent/tests');
+  // Determine which agent(s) to test
+  const agentsDir = join(__dirname, '../../..', 'agents');
+  const agentToTest = args.agent;
+  
+  let testDirs: string[] = [];
+  
+  if (agentToTest) {
+    // Test specific agent
+    const agentTestDir = join(agentsDir, agentToTest, 'tests');
+    testDirs = [agentTestDir];
+    console.log(`Testing agent: ${agentToTest}\n`);
+  } else {
+    // Test all agents
+    const availableAgents = ['openagent', 'opencoder'];
+    testDirs = availableAgents.map(a => join(agentsDir, a, 'tests'));
+    console.log(`Testing all agents: ${availableAgents.join(', ')}\n`);
+  }
+  
+  // Find test files across all test directories
   const pattern = args.pattern || '**/*.yaml';
-  const testFiles = globSync(pattern, { cwd: testDir, absolute: true });
+  let testFiles: string[] = [];
+  
+  for (const testDir of testDirs) {
+    const files = globSync(pattern, { cwd: testDir, absolute: true });
+    testFiles = testFiles.concat(files);
+  }
   
   if (testFiles.length === 0) {
     console.error(`❌ No test files found matching pattern: ${pattern}`);
+    console.error(`   Searched in: ${testDirs.join(', ')}`);
     process.exit(1);
   }
   
   console.log(`Found ${testFiles.length} test file(s):\n`);
   testFiles.forEach((f: string, idx: number) => {
-    const relativePath = f.replace(testDir + '/', '');
+    // Show relative path from agents dir
+    const relativePath = f.replace(agentsDir + '/', '');
     console.log(`  ${idx + 1}. ${relativePath}`);
   });
   console.log();

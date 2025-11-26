@@ -544,6 +544,9 @@ export class TestRunner {
     // =========================================================================
     // Check expected violations (new format)
     // =========================================================================
+    // Track which violations were expected so we don't fail on them later
+    const expectedViolationTypes = new Set<string>();
+    
     if (expectedViolations && evaluation) {
       for (const expectedViolation of expectedViolations) {
         // Map rule names to violation type patterns
@@ -569,6 +572,8 @@ export class TestRunner {
             return false;
           }
           this.log(`✓ Expected violation '${expectedViolation.rule}' found`);
+          // Mark these violations as expected so we don't fail on them later
+          actualViolations.forEach(v => expectedViolationTypes.add(v.type));
         } else {
           // Positive test: Should NOT have violation
           if (actualViolations.length > 0) {
@@ -642,11 +647,19 @@ export class TestRunner {
     }
 
     // =========================================================================
-    // Default: pass if no errors and no error-level violations
+    // Default: pass if no errors and no unexpected error-level violations
     // =========================================================================
     if (evaluation && evaluation.violationsBySeverity.error > 0) {
-      this.log(`Test failed: ${evaluation.violationsBySeverity.error} error-level violations`);
-      return false;
+      // Filter out expected violations
+      const unexpectedErrors = evaluation.allViolations.filter(v => 
+        v.severity === 'error' && !expectedViolationTypes.has(v.type)
+      );
+      
+      if (unexpectedErrors.length > 0) {
+        this.log(`Test failed: ${unexpectedErrors.length} unexpected error-level violations`);
+        unexpectedErrors.forEach(v => this.log(`  - ${v.type}: ${v.message}`));
+        return false;
+      }
     }
 
     return errors.length === 0;

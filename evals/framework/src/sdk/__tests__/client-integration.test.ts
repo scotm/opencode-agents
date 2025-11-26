@@ -1,157 +1,165 @@
 /**
- * Integration test for ClientManager + EventStreamHandler + Approval Strategies
- * Tests end-to-end flow: server start -> create session -> send prompt -> handle events
+ * Integration tests for ClientManager + EventStreamHandler
+ * 
+ * NOTE: These tests require the opencode CLI to be installed and a running server.
+ * They are skipped by default in CI environments.
+ * 
+ * To run these tests manually:
+ *   npx vitest run src/sdk/__tests__/client-integration.test.ts
  */
 
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ServerManager } from '../server-manager.js';
 import { ClientManager } from '../client-manager.js';
 import { EventStreamHandler } from '../event-stream-handler.js';
 import { AutoApproveStrategy } from '../approval/auto-approve-strategy.js';
 
-async function testClientIntegration() {
-  console.log('🧪 Testing ClientManager + EventStreamHandler Integration...\n');
+// Skip integration tests if SKIP_INTEGRATION is set or in CI
+const skipIntegration = process.env.SKIP_INTEGRATION === 'true' || process.env.CI === 'true';
 
-  const server = new ServerManager({
-    port: 0, // Random port
-    timeout: 10000,
+describe.skipIf(skipIntegration)('ClientManager Integration', () => {
+  let server: ServerManager;
+  let client: ClientManager;
+  let eventHandler: EventStreamHandler;
+  let sessionId: string;
+
+  beforeAll(async () => {
+    server = new ServerManager({
+      port: 0,
+      timeout: 15000,
+    });
+    
+    const { url } = await server.start();
+    client = new ClientManager({ baseUrl: url });
+    eventHandler = new EventStreamHandler(url);
   });
 
-  let client: ClientManager | null = null;
-  let eventHandler: EventStreamHandler | null = null;
+  afterAll(async () => {
+    if (eventHandler?.listening()) {
+      eventHandler.stopListening();
+    }
+    if (sessionId && client) {
+      try {
+        await client.deleteSession(sessionId);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+    if (server?.running()) {
+      await server.stop();
+    }
+  });
 
-  try {
-    // Test 1: Start server
-    console.log('Test 1: Starting server...');
-    const { url } = await server.start();
-    console.log(`✅ Server started at ${url}\n`);
-
-    // Test 2: Create client
-    console.log('Test 2: Creating client...');
-    client = new ClientManager({ baseUrl: url });
-    console.log('✅ Client created\n');
-
-    // Test 3: Create session
-    console.log('Test 3: Creating session...');
-    const session = await client.createSession('Smoke Test Session');
-    console.log(`✅ Session created: ${session.id}\n`);
-
-    // Test 4: Setup event handler with auto-approve strategy
-    console.log('Test 4: Setting up event handler with auto-approve...');
-    eventHandler = new EventStreamHandler(url);
-    const approvalStrategy = new AutoApproveStrategy();
+  it('should create a session', async () => {
+    const session = await client.createSession({ title: 'Integration Test Session' });
+    sessionId = session.id;
     
+    expect(session.id).toBeDefined();
+    expect(session.title).toBe('Integration Test Session');
+  });
+
+  it('should list sessions', async () => {
+    const sessions = await client.listSessions();
+    
+    expect(sessions).toBeDefined();
+    expect(Array.isArray(sessions)).toBe(true);
+    
+    const found = sessions.find(s => s.id === sessionId);
+    expect(found).toBeDefined();
+  });
+
+  it('should get session by ID', async () => {
+    const session = await client.getSession(sessionId);
+    
+    expect(session).toBeDefined();
+    expect(session.id).toBe(sessionId);
+  });
+
+  it('should setup event handler with auto-approve', async () => {
+    const approvalStrategy = new AutoApproveStrategy();
     const events: string[] = [];
     
-    // Listen to all events for debugging
-    eventHandler.on('session.updated', (event) => {
-      events.push('session.updated');
-      console.log(`  📨 Event: session.updated`);
-    });
-    
-    eventHandler.on('message.created', (event) => {
-      events.push('message.created');
-      console.log(`  📨 Event: message.created`);
-    });
-    
-    eventHandler.on('message.updated', (event) => {
-      events.push('message.updated');
-      console.log(`  📨 Event: message.updated`);
-    });
-    
-    eventHandler.on('part.created', (event) => {
-      events.push('part.created');
-      console.log(`  📨 Event: part.created`);
-    });
-    
-    eventHandler.on('part.updated', (event) => {
-      events.push('part.updated');
-      console.log(`  📨 Event: part.updated`);
-    });
+    eventHandler.on('session.updated', () => { events.push('session.updated'); });
+    eventHandler.on('message.created', () => { events.push('message.created'); });
+    eventHandler.on('message.updated', () => { events.push('message.updated'); });
     
     eventHandler.onPermission(async (event) => {
-      console.log(`  🔐 Permission requested: ${event.properties.tool || 'unknown'}`);
-      const approved = await approvalStrategy.shouldApprove(event);
-      console.log(`  ✅ Auto-approved: ${approved}`);
-      return approved;
+      return approvalStrategy.shouldApprove(event);
     });
 
-    // Start listening in background (don't await - it runs until stopped)
-    const evtHandler = eventHandler; // Capture for closure
-    eventHandler.startListening().catch(err => {
-      if (evtHandler.listening()) {
-        console.error('Event stream error:', err);
-      }
+    // Start listening in background
+    eventHandler.startListening().catch(() => {
+      // Ignore errors when stopping
     });
     
-    // Give event handler time to connect and subscribe
+    // Give time to connect
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    console.log('✅ Event handler listening\n');
+    expect(eventHandler.listening()).toBe(true);
+  });
 
-    // Test 5: Send a simple prompt (no tools needed)
-    console.log('Test 5: Sending simple prompt...');
-    const result = await client.sendPrompt(session.id, {
-      text: 'Say "Hello from smoke test" and nothing else.',
-      noReply: false,
+  it('should send a prompt and receive events', async () => {
+    const events: string[] = [];
+    
+    eventHandler.on('message.updated', () => { events.push('message.updated'); });
+    
+    await client.sendPrompt(sessionId, {
+      text: 'Say "Hello" and nothing else.',
     });
-    console.log(`✅ Prompt sent, got response\n`);
-
-    // Give events time to be received
-    await new Promise(resolve => setTimeout(resolve, 5000));
-
-    // Test 6: Check we received events
-    console.log('Test 6: Verifying events received...');
-    console.log(`  Total events captured: ${events.length}`);
-    console.log(`  Event types: ${[...new Set(events)].join(', ')}`);
     
-    if (events.length === 0) {
-      console.error('❌ No events received - event handler may not be working properly');
-      throw new Error('Expected to receive events from the server');
-    } else {
-      console.log(`✅ Received ${events.length} events\n`);
-    }
+    // Give time for events
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    
+    // Should have received some events
+    expect(events.length).toBeGreaterThan(0);
+  });
 
-    // Test 7: List sessions
-    console.log('Test 7: Listing sessions...');
+  it('should delete session', async () => {
+    await client.deleteSession(sessionId);
+    
+    // Session should no longer exist
     const sessions = await client.listSessions();
-    const foundSession = sessions.find(s => s.id === session.id);
-    if (!foundSession) {
-      throw new Error('Session should be in list');
-    }
-    console.log(`✅ Found session in list (${sessions.length} total sessions)\n`);
-
-    // Cleanup
-    console.log('Cleanup: Stopping event handler...');
-    if (eventHandler) {
-      eventHandler.stopListening();
-    }
-    await new Promise(resolve => setTimeout(resolve, 500));
-    console.log('✅ Event handler stopped\n');
-
-    console.log('Cleanup: Deleting session...');
-    await client.deleteSession(session.id);
-    console.log('✅ Session deleted\n');
-
-    console.log('Cleanup: Stopping server...');
-    await server.stop();
-    console.log('✅ Server stopped\n');
-
-    console.log('🎉 All integration tests passed!\n');
-    process.exit(0);
-  } catch (error) {
-    console.error('❌ Test failed:', error);
+    const found = sessions.find(s => s.id === sessionId);
+    expect(found).toBeUndefined();
     
-    // Cleanup on error
-    if (eventHandler) {
-      eventHandler.stopListening();
-    }
-    await server.stop();
-    process.exit(1);
-  }
-}
+    sessionId = ''; // Clear so afterAll doesn't try to delete again
+  });
+});
 
-// Run the test
-testClientIntegration().catch((error) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
+// Unit tests that don't require a running server
+describe('ClientManager Unit', () => {
+  it('should create with base URL', () => {
+    const client = new ClientManager({ baseUrl: 'http://localhost:3000' });
+    
+    expect(client).toBeDefined();
+  });
+});
+
+describe('EventStreamHandler Unit', () => {
+  it('should create with base URL', () => {
+    const handler = new EventStreamHandler('http://localhost:3000');
+    
+    expect(handler).toBeDefined();
+    expect(handler.listening()).toBe(false);
+  });
+
+  it('should register event handlers', () => {
+    const handler = new EventStreamHandler('http://localhost:3000');
+    
+    handler.on('session.created', () => {});
+    handler.on('message.created', () => {});
+    
+    // No error means success
+    expect(true).toBe(true);
+  });
+
+  it('should remove all handlers', () => {
+    const handler = new EventStreamHandler('http://localhost:3000');
+    
+    handler.on('session.created', () => {});
+    handler.removeAllHandlers();
+    
+    // No error means success
+    expect(true).toBe(true);
+  });
 });

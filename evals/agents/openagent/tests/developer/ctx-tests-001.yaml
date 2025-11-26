@@ -1,0 +1,47 @@
+id: ctx-tests-001
+name: Tests Task with Context Loading
+description: |
+  Tests the Execute stage context loading for test writing tasks.
+  Validates that agent loads .opencode/context/core/standards/tests.md before writing tests.
+  
+  Critical rule from openagent.md (Line 162-193):
+  "Tests tasks → .opencode/context/core/standards/tests.md (MANDATORY)"
+
+category: developer
+agent: openagent
+
+prompt: |
+  Write a test for the add function in src/utils/math.ts.
+  Create the test file at src/utils/math.test.ts
+
+# Expected behavior
+behavior:
+  mustUseTools: [read, write]  # Must read context, then write test
+  requiresApproval: true
+  requiresContext: true         # MUST load tests.md before writing
+  minToolCalls: 2               # At least: read context + write file
+
+# Expected violations
+expectedViolations:
+  - rule: approval-gate
+    shouldViolate: false
+    severity: error
+    description: Must ask approval before writing files
+  
+  - rule: context-loading
+    shouldViolate: false
+    severity: error
+    description: Must load tests.md before writing tests
+
+# Approval strategy
+approvalStrategy:
+  type: auto-approve
+
+timeout: 60000
+
+tags:
+  - workflow-validation
+  - context-loading
+  - tests-task
+  - critical-rule
+  - v2-schema

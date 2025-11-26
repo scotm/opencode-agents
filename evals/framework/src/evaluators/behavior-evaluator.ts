@@ -122,6 +122,60 @@ export class BehaviorEvaluator extends BaseEvaluator {
       });
     }
 
+    // Check 1b: mustUseAnyOf - at least one tool set must be fully used
+    if (this.behavior.mustUseAnyOf && this.behavior.mustUseAnyOf.length > 0) {
+      // Check if any of the tool sets is fully satisfied
+      const satisfiedSets: string[][] = [];
+      const unsatisfiedSets: { set: string[]; missing: string[] }[] = [];
+      
+      for (const toolSet of this.behavior.mustUseAnyOf) {
+        const missingFromSet = toolSet.filter(tool => !toolsUsed.includes(tool));
+        if (missingFromSet.length === 0) {
+          satisfiedSets.push(toolSet);
+        } else {
+          unsatisfiedSets.push({ set: toolSet, missing: missingFromSet });
+        }
+      }
+      
+      const passed = satisfiedSets.length > 0;
+      
+      if (!passed) {
+        violations.push(
+          this.createViolation(
+            'missing-required-tool-set',
+            'error',
+            `None of the required tool sets were fully used. Options: ${this.behavior.mustUseAnyOf.map(s => `[${s.join(', ')}]`).join(' OR ')}`,
+            Date.now(),
+            {
+              requiredSets: this.behavior.mustUseAnyOf,
+              toolsUsed: uniqueTools,
+              unsatisfiedSets,
+            }
+          )
+        );
+      }
+
+      checks.push({
+        name: 'must-use-any-of',
+        passed,
+        weight: 100,
+        evidence: [
+          this.createEvidence(
+            'alternative-tools',
+            passed
+              ? `Satisfied tool set: [${satisfiedSets[0].join(', ')}]`
+              : `No tool set satisfied. Options: ${this.behavior.mustUseAnyOf.map(s => `[${s.join(', ')}]`).join(' OR ')}`,
+            {
+              requiredSets: this.behavior.mustUseAnyOf,
+              used: uniqueTools,
+              satisfiedSets,
+              unsatisfiedSets,
+            }
+          )
+        ]
+      });
+    }
+
     // Check 2: mustNotUseTools
     if (this.behavior.mustNotUseTools && this.behavior.mustNotUseTools.length > 0) {
       const forbiddenToolsUsed: string[] = [];

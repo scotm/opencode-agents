@@ -50,6 +50,17 @@ export interface Message {
 }
 
 /**
+ * Message with parts included (as returned by SDK)
+ * 
+ * The SDK returns messages with parts embedded, not separate.
+ * This type represents the full SDK response structure.
+ */
+export interface MessageWithParts {
+  info: Message;
+  parts: Part[];
+}
+
+/**
  * Message part from session/part/{session-id}/{message-id}/{part-id}.json
  */
 export interface Part {

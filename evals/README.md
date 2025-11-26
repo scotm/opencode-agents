@@ -9,8 +9,12 @@ cd evals/framework
 npm install
 npm run build
 
-# Run all tests (uses free model by default)
+# Run all agent tests (uses free model by default)
 npm run eval:sdk
+
+# Run tests for specific agent
+npm run eval:sdk -- --agent=opencoder
+npm run eval:sdk -- --agent=openagent
 
 # Run with specific model
 npm run eval:sdk -- --model=anthropic/claude-3-5-sonnet-20241022
@@ -36,7 +40,6 @@ evals/
 │   │   │   ├── test-case-schema.ts
 │   │   │   ├── test-case-loader.ts
 │   │   │   ├── run-sdk-tests.ts        # CLI entry point
-│   │   │   ├── show-test-details.ts    # Debug tool
 │   │   │   └── approval/               # Approval strategies
 │   │   ├── collector/           # Session data collection
 │   │   ├── evaluators/          # Rule violation detection
@@ -44,24 +47,37 @@ evals/
 │   ├── docs/
 │   │   └── test-design-guide.md # Test design philosophy
 │   ├── SDK_EVAL_README.md       # Comprehensive SDK guide
-│   ├── README.md                # Framework documentation
-│   └── package.json
+│   └── README.md                # Framework documentation
 │
-├── agents/openagent/          # OpenAgent-specific tests
-│   ├── tests/               # YAML test cases
-│   │   ├── developer/           # Developer workflow tests
-│   │   ├── business/            # Business analysis tests
-│   │   ├── creative/            # Content creation tests
-│   │   └── edge-case/           # Edge case tests
-│   ├── tests/simple/            # Synthetic test data
-│   ├── docs/
-│   │   ├── OPENAGENT_RULES.md   # Rules from openagent.md
-│   │   └── TEST_SCENARIOS.md    # Test scenario catalog
-│   ├── README.md                # OpenAgent test overview
-│   └── TEST_RESULTS.md          # Test results summary
+├── agents/                      # Agent-specific test suites
+│   ├── openagent/               # OpenAgent tests (text-based approval workflow)
+│   │   ├── tests/
+│   │   │   ├── developer/       # Developer workflow tests
+│   │   │   ├── business/        # Business analysis tests
+│   │   │   └── edge-case/       # Edge case tests
+│   │   ├── docs/
+│   │   │   └── OPENAGENT_RULES.md
+│   │   └── README.md
+│   │
+│   ├── opencoder/               # Opencoder tests (direct execution)
+│   │   ├── tests/
+│   │   │   └── developer/       # Developer workflow tests
+│   │   └── README.md
+│   │
+│   └── shared/                  # Shared test utilities
+│       └── tests/common/
 │
 └── results/                     # Test outputs (gitignored)
 ```
+
+## Agent Differences
+
+| Feature | OpenAgent | Opencoder |
+|---------|-----------|-----------|
+| Approval | Text-based + tool permissions | Tool permissions only |
+| Workflow | Analyze→Approve→Execute→Validate | Direct execution |
+| Context | Mandatory before execution | On-demand |
+| Test Style | Multi-turn (approval flow) | Single prompt |
 
 ## Key Features
 

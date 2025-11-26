@@ -25,6 +25,7 @@ export interface RunnerConfig {
   sessionReader: SessionReader;
   timelineBuilder: TimelineBuilder;
   evaluators?: IEvaluator[];
+  sdkClient?: any; // Optional SDK client for enhanced session retrieval
 }
 
 export interface AggregatedResult {
@@ -96,13 +97,13 @@ export class EvaluatorRunner {
     sessionId: string,
     evaluatorNames?: string[]
   ): Promise<AggregatedResult> {
-    // Get session info
-    const sessionInfo = this.sessionReader.getSessionInfo(sessionId);
+    // Get session info (now async)
+    const sessionInfo = await this.sessionReader.getSessionInfo(sessionId);
     if (!sessionInfo) {
       throw new Error(`Session not found: ${sessionId}`);
     }
 
-    // Build timeline
+    // Build timeline (already async)
     const timeline = await this.timelineBuilder.buildTimeline(sessionId);
 
     // Determine which evaluators to run
@@ -128,9 +129,18 @@ export class EvaluatorRunner {
 
   /**
    * Run all registered evaluators on a session
+   * 
+   * Alias for runEvaluators() with no specific evaluator names.
    */
   async runAll(sessionId: string): Promise<AggregatedResult> {
     return this.runEvaluators(sessionId);
+  }
+
+  /**
+   * Get session info
+   */
+  async getSessionInfo(sessionId: string): Promise<SessionInfo | null> {
+    return await this.sessionReader.getSessionInfo(sessionId);
   }
 
   /**

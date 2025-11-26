@@ -14,15 +14,39 @@ export interface ClientConfig {
   timeout?: number;
 }
 
-export interface PromptOptions {
+/**
+ * Configuration for creating a new session
+ */
+export interface SessionConfig {
+  /** Session title */
+  title?: string;
+}
+
+/**
+ * Configuration for sending a prompt to a session
+ */
+export interface PromptConfig {
+  /** The prompt text to send */
   text: string;
+  /** Agent to use for this prompt (e.g., 'openagent', 'opencoder') */
+  agent?: string;
+  /** Model to use for this prompt */
   model?: {
     providerID: string;
     modelID: string;
   };
+  /** Working directory for the agent */
+  directory?: string;
+  /** Files to attach to the prompt */
   files?: string[];
-  noReply?: boolean; // If true, only adds context without triggering AI response
+  /** If true, only adds context without triggering AI response */
+  noReply?: boolean;
 }
+
+/**
+ * @deprecated Use PromptConfig instead
+ */
+export interface PromptOptions extends PromptConfig {}
 
 export interface SessionInfo {
   id: string;
@@ -44,44 +68,82 @@ export class ClientManager {
 
   /**
    * Create a new session
+   * 
+   * Note: Agent selection happens in sendPrompt(), not here.
+   * The SDK's session.create() only accepts title and parentID.
+   * 
+   * @param config - Session configuration
+   * @returns Created session
    */
-  async createSession(title?: string): Promise<Session> {
-    const response = await this.client.session.create({
-      body: {
-        title: title || `Eval Session ${new Date().toISOString()}`,
-      },
-    });
+  async createSession(config: SessionConfig = {}): Promise<Session> {
+    try {
+      const response = await this.client.session.create({
+        body: {
+          title: config.title || `Eval Session ${new Date().toISOString()}`,
+        },
+      });
 
-    if (!response.data) {
-      throw new Error('Failed to create session');
+      if (!response.data) {
+        throw new Error('Failed to create session: No data in response');
+      }
+
+      return response.data;
+    } catch (error) {
+      console.error('[ClientManager] Session creation error:', error);
+      throw new Error(`Failed to create session: ${(error as Error).message}`);
     }
-
-    return response.data;
   }
 
   /**
    * Send a prompt to a session
+   * 
+   * This is where agent selection happens! The agent parameter in the body
+   * determines which agent processes the prompt.
+   * 
+   * @param sessionId - Session ID to send prompt to
+   * @param config - Prompt configuration including agent, text, model, etc.
+   * @returns Message response with info and parts
    */
-  async sendPrompt(sessionId: string, options: PromptOptions): Promise<{ info: Message; parts: Part[] }> {
-    const parts: TextPartInput[] = [{ type: 'text', text: options.text }];
+  async sendPrompt(sessionId: string, config: PromptConfig): Promise<{ info: Message; parts: Part[] }> {
+    const parts: TextPartInput[] = [{ type: 'text', text: config.text }];
 
     // Add file attachments if specified
-    if (options.files && options.files.length > 0) {
+    if (config.files && config.files.length > 0) {
       // TODO: Implement file attachment support
-      console.warn('File attachments not yet implemented');
+      console.warn('[ClientManager] File attachments not yet implemented');
     }
 
-    const response = await this.client.session.prompt({
+    // Build request body with agent parameter
+    const body: any = {
+      parts,
+      noReply: config.noReply,
+    };
+
+    // Add agent if specified (this is the key fix!)
+    if (config.agent) {
+      body.agent = config.agent;
+    }
+
+    // Add model if specified
+    if (config.model) {
+      body.model = config.model;
+    }
+
+    // Build request with optional directory parameter
+    const request: any = {
       path: { id: sessionId },
-      body: {
-        model: options.model,
-        parts,
-        noReply: options.noReply,
-      },
-    });
+      body,
+    };
+
+    // Add directory if specified
+    if (config.directory) {
+      request.query = { directory: config.directory };
+    }
+
+    const response = await this.client.session.prompt(request);
 
     if (!response.data) {
-      throw new Error('Failed to send prompt');
+      throw new Error('Failed to send prompt: No data in response');
     }
 
     return response.data;
