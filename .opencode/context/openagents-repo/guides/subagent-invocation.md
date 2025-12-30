@@ -27,7 +27,7 @@ Based on the OpenCode CLI registration, use these exact strings for `subagent_ty
 **Core Subagents**:
 - `"Task Manager"` - Task breakdown and planning
 - `"Documentation"` - Documentation generation
-- `"Context Retriever"` - Context file discovery (⚠️ May not be registered in CLI yet)
+- `"Context Retriever"` - Context file discovery
 
 **Code Subagents**:
 - `"Coder Agent"` - Code implementation
